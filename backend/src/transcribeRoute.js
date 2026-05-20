@@ -16,9 +16,18 @@ const upload = multer({
   storage: multer.memoryStorage(),
 });
 
-// Initialize APIs
-const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Lazy-load API clients (initialize on first use)
+let deepgram = null;
+let genAI = null;
+
+const initializeClients = () => {
+  if (!deepgram) {
+    deepgram = createClient(process.env.DEEPGRAM_API_KEY);
+  }
+  if (!genAI) {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+};
 
 /**
  * POST /api/transcribe
@@ -26,6 +35,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 router.post("/", upload.single("audio"), async (req, res) => {
   try {
+    // Initialize clients on first request
+    initializeClients();
+
     // Validate audio file
     const fileValidation = validateAudioFile(req.file);
     if (!fileValidation.valid) {
@@ -74,7 +86,9 @@ router.post("/", upload.single("audio"), async (req, res) => {
     // Generate MOM with Gemini
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      systemInstruction: systemPrompt,
+      systemInstruction: {
+        parts: [{ text: systemPrompt }]
+      }
     });
 
     const response = await model.generateContent(
