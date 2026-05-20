@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import transcribeRoute from "./transcribeRoute.js";
 
 dotenv.config();
 
@@ -16,10 +17,8 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Backend server is running" });
 });
 
-// Placeholder for transcribe route (will be implemented in Phase 2)
-app.post("/api/transcribe", (req, res) => {
-  res.status(501).json({ error: "Transcribe endpoint not yet implemented" });
-});
+// Transcribe route
+app.use("/api/transcribe", transcribeRoute);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
