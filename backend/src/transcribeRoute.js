@@ -1,5 +1,5 @@
 import { createClient } from "@deepgram/sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai"; 
 import express from "express";
 import multer from "multer";
 import {
@@ -16,17 +16,34 @@ const upload = multer({
   storage: multer.memoryStorage(),
 });
 
-// Lazy-load API clients (initialize on first use)
-let deepgram = null;
-let genAI = null;
+// Initialize placeholder variable 
+let deepgramInstance = null;
+let geminiInstance = null;
 
-const initializeClients = () => {
-  if (!deepgram) {
-    deepgram = createClient(process.env.DEEPGRAM_API_KEY);
+/**
+ * Lazy-loads and caches API connection clients 
+ */
+export const initializeClients = () => {
+  if (!process.env.DEEPGRAM_API_KEY || !process.env.GEMINI_API_KEY) {
+    throw new Error("Missing required environment API keys inside your .env configuration storage.");
   }
-  if (!genAI) {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+  if (!deepgramInstance) {
+    console.log("Lazy Loading: Initializing Deepgram Client Instance...");
+    deepgramInstance = createClient(process.env.DEEPGRAM_API_KEY);
   }
+
+  if (!geminiInstance) {
+    console.log("Lazy Loading: Initializing Modern Google Gemini Client Instance...");
+    geminiInstance = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY
+    });
+  }
+
+  return { 
+    deepgram: deepgramInstance, 
+    gemini: geminiInstance 
+  };
 };
 
 /**
@@ -51,7 +68,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
       customPrompt = null,
     } = req.body;
 
-    console.log("⚡ Step 1/2: Transcribing audio with Deepgram Nova-3...");
+    console.log("Step 1/2: Transcribing audio with Deepgram Nova-3...");
 
     // Transcribe audio with Deepgram
     const { result, error: deepgramError } =
@@ -78,7 +95,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
       });
     }
 
-    console.log("⚡ Step 2/2: Generating MOM with Gemini 2.5 Flash...");
+    console.log("Step 2/2: Generating MOM with Gemini 2.5 Flash...");
 
     // Use hardcoded system prompt or custom prompt
     const systemPrompt = customPrompt || SYSTEM_PROMPT;
