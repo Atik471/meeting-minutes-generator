@@ -5,7 +5,7 @@ import multer from "multer";
 import {
   formatTranscript,
   validateAudioFile,
-  loadSystemPrompt,
+  SYSTEM_PROMPT,
 } from "../src/utils.js";
 
 const router = express.Router();
@@ -80,8 +80,8 @@ router.post("/", upload.single("audio"), async (req, res) => {
 
     console.log("⚡ Step 2/2: Generating MOM with Gemini 2.5 Flash...");
 
-    // Load system prompt (from file or custom)
-    const systemPrompt = customPrompt || loadSystemPrompt();
+    // Use hardcoded system prompt or custom prompt
+    const systemPrompt = customPrompt || SYSTEM_PROMPT;
 
     // Generate MOM with Gemini
     const model = genAI.getGenerativeModel({
