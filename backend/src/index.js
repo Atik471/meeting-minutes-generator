@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import transcribeRoute from "./transcribeRoute.js";
+import { SYSTEM_PROMPT } from "./utils.js";
 
 dotenv.config();
 
@@ -15,6 +16,11 @@ app.use(express.json());
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Backend server is running" });
+});
+
+// Get default system prompt
+app.get("/api/default-prompt", (req, res) => {
+  res.json({ prompt: SYSTEM_PROMPT });
 });
 
 // Transcribe route
