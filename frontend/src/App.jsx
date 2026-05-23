@@ -21,10 +21,18 @@ function App() {
   const [processingStage, setProcessingStage] = useState(0);
   const [activeTab, setActiveTab] = useState('transcript');
 
-  const handleFileSelect = async (selectedFile) => {
+  const handleFileSelect = (selectedFile) => {
     setFile(selectedFile);
     setError('');
-    await processFile(selectedFile);
+    setResults(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!file) {
+      setError('Please select a file first');
+      return;
+    }
+    await processFile(file);
   };
 
   const processFile = async (audioFile) => {
@@ -108,10 +116,6 @@ function App() {
                   Transform your audio meetings into professional minutes instantly
                 </p>
               </div>
-              <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-sm text-slate-300">Backend Connected</span>
-              </div>
             </div>
           </div>
         </header>
@@ -127,6 +131,16 @@ function App() {
               {/* Config Panel */}
               {!results && (
                 <ConfigPanel onConfigChange={handleConfigChange} isLoading={loading} />
+              )}
+
+              {/* Submit Button */}
+              {file && !loading && !results && (
+                <button
+                  onClick={handleSubmit}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-semibold rounded-lg transition-all"
+                >
+                  Process Audio
+                </button>
               )}
 
               {/* Processing Status */}
