@@ -1,11 +1,35 @@
-import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, RotateCcw, Copy, Check } from 'lucide-react';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 const ConfigPanel = ({ onConfigChange, isLoading }) => {
   const [language, setLanguage] = useState('en');
   const [temperature, setTemperature] = useState(0.2);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [loadingPrompt, setLoadingPrompt] = useState(true);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  // Fetch default prompt on mount
+  useEffect(() => {
+    const fetchDefaultPrompt = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/default-prompt`);
+        if (response.ok) {
+          const data = await response.json();
+          setDefaultPrompt(data.prompt);
+        }
+      } catch (error) {
+        console.error('Failed to fetch default prompt:', error);
+      } finally {
+        setLoadingPrompt(false);
+      }
+    };
+
+    fetchDefaultPrompt();
+  }, []);
 
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
@@ -20,6 +44,24 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
   const handlePromptChange = (prompt) => {
     setCustomPrompt(prompt);
     onConfigChange({ language, temperature, customPrompt: prompt });
+  };
+
+  const handleResetPrompt = () => {
+    setCustomPrompt('');
+    onConfigChange({ language, temperature, customPrompt: '' });
+  };
+
+  const handleUseDefault = () => {
+    setCustomPrompt(defaultPrompt);
+    onConfigChange({ language, temperature, customPrompt: defaultPrompt });
+  };
+
+  const handleCopyDefault = async () => {
+    if (defaultPrompt) {
+      await navigator.clipboard.writeText(defaultPrompt);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    }
   };
 
   return (
@@ -53,7 +95,7 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
       {/* Temperature Slider */}
       <div className="glass rounded-xl p-4">
         <label className="block text-sm font-medium text-slate-300 mb-3">
-          Temperature: <span className="text-purple-400 font-semibold">{temperature.toFixed(1)}</span>
+          Temperature: <span className="text-cyan-400 font-semibold">{temperature.toFixed(1)}</span>
         </label>
         <div className="space-y-2">
           <input
@@ -64,7 +106,7 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
             value={temperature}
             onChange={(e) => handleTemperatureChange(parseFloat(e.target.value))}
             disabled={isLoading}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <div className="flex justify-between text-xs text-slate-400">
             <span>Structured (0.0)</span>
@@ -88,19 +130,74 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
 
       {/* Custom Prompt */}
       {showAdvanced && (
-        <div className="glass rounded-xl p-4 space-y-2 fade-in">
-          <label className="block text-sm font-medium text-slate-300">
-            Custom System Prompt
-          </label>
+        <div className="glass rounded-xl p-4 space-y-3 fade-in">
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-slate-300">
+              System Prompt
+            </label>
+            <div className="flex gap-2">
+              {customPrompt && (
+                <button
+                  onClick={handleResetPrompt}
+                  disabled={isLoading}
+                  className="flex items-center gap-1 text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-all disabled:opacity-50"
+                  title="Clear custom prompt"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Clear
+                </button>
+              )}
+              {defaultPrompt && !customPrompt && (
+                <button
+                  onClick={handleUseDefault}
+                  disabled={isLoading}
+                  className="text-xs px-2 py-1 bg-cyan-600/30 hover:bg-cyan-600/40 text-cyan-400 rounded transition-all disabled:opacity-50"
+                >
+                  Use Default
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!customPrompt && defaultPrompt && !loadingPrompt && (
+            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 max-h-40 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-slate-400 font-semibold">Default System Prompt:</p>
+                <button
+                  onClick={handleCopyDefault}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded transition-all hover:bg-slate-800"
+                  title={copyFeedback ? "Copied!" : "Copy default prompt"}
+                >
+                  {copyFeedback ? (
+                    <>
+                      <Check className="w-3 h-3 text-cyan-400" />
+                      <span className="text-cyan-400">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-slate-500 group-hover:text-slate-400" />
+                      <span className="text-slate-500 group-hover:text-slate-400 hidden sm:inline">Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-slate-300 whitespace-pre-wrap font-mono line-clamp-8">
+                {defaultPrompt}
+              </p>
+            </div>
+          )}
+
           <textarea
             value={customPrompt}
             onChange={(e) => handlePromptChange(e.target.value)}
             disabled={isLoading}
-            placeholder="Leave empty to use default MOM generation prompt..."
-            className="w-full h-32 bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm placeholder-slate-500 resize-none focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder={defaultPrompt ? "Start editing or clear to use default..." : "Enter your custom system prompt..."}
+            className="w-full h-32 bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 text-xs placeholder-slate-500 resize-y focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-mono"
           />
           <p className="text-xs text-slate-500">
-            Leave empty to use your default prompt
+            {customPrompt 
+              ? 'Editing custom prompt. Click Clear to revert to default.' 
+              : 'Leave empty to use the default MOM generation prompt'}
           </p>
         </div>
       )}
