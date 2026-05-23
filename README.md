@@ -140,17 +140,34 @@ Returns SSE events for:
 
 ## Deployment Notes
 
+### Backend on Vercel
+
+Deploy the `backend/` folder as a separate Vercel project.
+
+Use these settings after importing the repository from GitHub:
+- Root Directory: `backend`
+- Framework Preset: Other
+- Build Command: leave empty
+- Output Directory: leave empty
+
+Add these environment variables in Vercel:
+- `DEEPGRAM_API_KEY`
+- `GEMINI_API_KEY`
+
+The backend functions are exposed as:
+- `GET /api/health`
+- `GET /api/default-prompt`
+- `POST /api/transcribe`
+
 ### Frontend on Vercel
 
 The frontend is Vite-based and can be deployed to Vercel as a static site.
 
 ### Backend hosting
 
-The backend currently runs as a normal Express server. For Vercel, you will need one of these approaches:
-- convert the backend to Vercel Serverless Functions
-- or host the backend on another platform such as Render, Railway, Fly.io, or a VM
+The local backend still runs as a normal Express server, but the Vercel deployment now uses function entrypoints inside `backend/api/`.
 
-If the backend is hosted separately, set `VITE_API_BASE_URL` in the frontend deployment environment.
+If the backend is hosted separately, set `VITE_API_BASE_URL` in the frontend deployment environment to the backend Vercel URL.
 
 ## Tech Stack
 
