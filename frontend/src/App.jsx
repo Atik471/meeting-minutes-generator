@@ -59,9 +59,8 @@ function App() {
         formData.append('customPrompt', config.customPrompt);
       }
 
-      setProcessingStage(2);
-
-      // Use fetch to get streaming SSE response
+      // Use fetch for streaming SSE response, show uploading stage immediately
+      // Note: Fetch doesn't provide upload progress, but stage 1 shows "Uploading..."
       const response = await fetch(`${API_BASE_URL}/api/transcribe`, {
         method: 'POST',
         body: formData,
@@ -71,6 +70,9 @@ function App() {
         const errorText = await response.text();
         throw new Error(errorText || `HTTP ${response.status}`);
       }
+
+      // Move to transcription stage once response starts
+      setProcessingStage(2);
 
       // Parse SSE stream
       const reader = response.body.getReader();

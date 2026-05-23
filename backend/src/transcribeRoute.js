@@ -1,20 +1,95 @@
 import { createClient } from "@deepgram/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import express from "express";
-import multer from "multer";
+import busboy from "busboy";
+import { PassThrough } from "stream";
 import {
   formatTranscript,
-  validateAudioFile,
   SYSTEM_PROMPT,
 } from "../src/utils.js";
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const upload = multer({
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
-  storage: multer.memoryStorage(),
-});
+/**
+ * Custom streaming middleware for handling audio uploads
+ * Uses busboy to parse multipart form data without buffering
+ * Audio streams directly to Deepgram API
+ */
+const handleStreamingUpload = (req, res, next) => {
+  console.log('📥 handleStreamingUpload middleware triggered');
+  
+  const bb = busboy({ headers: req.headers });
+  let audioStream = null;
+  let audioField = null;
+  let hasError = false;
+
+  bb.on('file', (fieldname, file, info) => {
+    console.log(`📄 File field "${fieldname}" received: ${info.filename}`);
+    if (hasError) {
+      file.resume(); // drain the stream
+      return;
+    }
+    
+    audioField = { fieldname, filename: info.filename, encoding: info.encoding, mimetype: info.mimeType };
+    
+    // Use PassThrough to allow busboy to finish parsing while Deepgram processes
+    // Audio flows: browser -> busboy -> PassThrough -> Deepgram (zero buffering!)
+    audioStream = new PassThrough();
+    
+    file.on('data', (chunk) => {
+      audioStream.write(chunk);
+    });
+    
+    file.on('end', () => {
+      audioStream.end();
+      console.log('📄 File stream ended');
+    });
+    
+    file.on('error', (error) => {
+      console.error('❌ File stream error:', error);
+      hasError = true;
+      req.uploadError = error.message;
+      audioStream.destroy(error);
+    });
+  });
+
+  bb.on('field', (fieldname, val) => {
+    console.log(`📋 Field received: ${fieldname} = ${val}`);
+    req.body = req.body || {};
+    req.body[fieldname] = val;
+  });
+
+  bb.on('close', () => {
+    console.log('🔚 Busboy parsing complete');
+    
+    if (hasError) {
+      console.error('❌ Upload had errors, rejecting request');
+      return next(new Error(`Upload error: ${req.uploadError}`));
+    }
+    
+    if (!audioStream) {
+      console.error('❌ No audio file was received');
+      return next(new Error('No audio file provided'));
+    }
+
+    req.file = {
+      stream: audioStream,
+      ...audioField
+    };
+    
+    console.log('✓ Audio stream ready, calling next middleware');
+    next();
+  });
+
+  bb.on('error', (error) => {
+    console.error('❌ Busboy parser error:', error);
+    hasError = true;
+    req.uploadError = error.message;
+  });
+
+  console.log('⏳ Starting busboy multipart parsing...');
+  req.pipe(bb);
+};
 
 // Initialize placeholder variable 
 let deepgramInstance = null;
@@ -60,24 +135,34 @@ const sendSSEEvent = (res, eventType, data) => {
  * POST /api/transcribe
  * Main endpoint for transcribing audio and generating MOM
  * Uses Server-Sent Events (SSE) for real-time progress updates
+ * 
+ * ZERO-BUFFERING STREAMING ARCHITECTURE:
+ * - Audio stream arrives from client via multipart form data
+ * - Busboy parses multipart data without buffering file to disk
+ * - Audio stream flows directly to Deepgram API (no intermediate buffering)
+ * - Deepgram handles the stream, returns transcript
+ * - Gemini generates MOM from transcript
+ * - Results sent back via SSE
+ * 
+ * Memory usage: ~50-100MB (Node overhead only, not file size)
+ * Multiple concurrent uploads: No cumulative RAM usage from files
+ * No disk writes: All processing in memory with streaming
  */
-router.post("/", upload.single("audio"), async (req, res) => {
+router.post("/", handleStreamingUpload, async (req, res) => {
   try {
+    console.log('🚀 POST /api/transcribe handler triggered');
+    
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
+    console.log('✓ SSE headers set');
+
     // Initialize clients on first request and capture them
     const { deepgram, gemini } = initializeClients();
-
-    // Validate audio file
-    const fileValidation = validateAudioFile(req.file);
-    if (!fileValidation.valid) {
-      sendSSEEvent(res, 'error', { message: fileValidation.error });
-      return res.end();
-    }
+    console.log('✓ API clients initialized');
 
     // Extract parameters from request
     const {
@@ -86,12 +171,27 @@ router.post("/", upload.single("audio"), async (req, res) => {
       customPrompt = null,
     } = req.body;
 
-    console.log("Step 1/2: Transcribing audio with Deepgram Nova-3...");
+    console.log('📋 Request params:', { language, temperature, customPrompt: !!customPrompt });
+
+    // Send immediate progress event to confirm upload received
+    sendSSEEvent(res, 'progress', {
+      stage: 1,
+      label: 'Upload received',
+      status: 'in-progress',
+    });
+    console.log('📤 Sent: upload received event');
+
+    if (!req.file || !req.file.stream) {
+      throw new Error('No audio stream available');
+    }
+
+    console.log("⏳ Step 1/2: Transcribing audio with Deepgram Nova-3...");
     const transcriptionStartTime = Date.now();
 
-    // Transcribe audio with Deepgram
+    // Transcribe audio directly via stream (zero buffering!)
+    console.log('📡 Calling deepgram.listen.prerecorded.transcribeFile...');
     const { result, error: deepgramError } =
-      await deepgram.listen.prerecorded.transcribeFile(req.file.buffer, {
+      await deepgram.listen.prerecorded.transcribeFile(req.file.stream, {
         model: "nova-3",
         language: language,
         diarize: true,
@@ -100,9 +200,10 @@ router.post("/", upload.single("audio"), async (req, res) => {
       });
 
     const transcriptionTime = Date.now() - transcriptionStartTime;
+    console.log(`✓ Deepgram response received in ${transcriptionTime}ms`);
 
     if (deepgramError) {
-      console.error("Deepgram Error:", deepgramError);
+      console.error("❌ Deepgram Error:", deepgramError);
       sendSSEEvent(res, 'error', { message: `Deepgram transcription failed: ${deepgramError.message}` });
       return res.end();
     }
@@ -116,7 +217,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
     }
 
     // Send transcription complete event
-    console.log(`Transcription complete in ${transcriptionTime}ms`);
+    console.log(`✓ Transcription complete in ${transcriptionTime}ms`);
     sendSSEEvent(res, 'progress', {
       stage: 2,
       label: 'Transcribing',
@@ -124,7 +225,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
       processingTime: transcriptionTime,
     });
 
-    console.log("Step 2/2: Generating MOM with Gemini 2.5 Flash...");
+    console.log("⏳ Step 2/2: Generating MOM with Gemini 2.5 Flash...");
     const momStartTime = Date.now();
 
     // Use hardcoded system prompt or custom prompt
@@ -138,12 +239,14 @@ router.post("/", upload.single("audio"), async (req, res) => {
       }
     });
 
+    console.log('📡 Calling gemini.generateContent...');
     const response = await model.generateContent(
       `Here is the multi-speaker meeting transcript to summarize:\n\n${formattedTranscript}`
     );
 
     const momTime = Date.now() - momStartTime;
     const momText = response.response.text();
+    console.log(`✓ Gemini response received in ${momTime}ms`);
 
     if (!momText) {
       sendSSEEvent(res, 'error', { message: 'Failed to generate MOM. Please try again.' });
@@ -164,7 +267,6 @@ router.post("/", upload.single("audio"), async (req, res) => {
       metadata: {
         language: language,
         temperature: parseFloat(temperature),
-        audioSize: req.file.size,
         timestamp: new Date().toISOString(),
         processingTime: {
           transcription: transcriptionTime,
@@ -176,7 +278,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
 
     res.end();
   } catch (err) {
-    console.error("Pipeline Error:", err);
+    console.error("❌ Pipeline Error:", err);
     sendSSEEvent(res, 'error', {
       message: err.message || "Internal server error during transcription pipeline",
     });

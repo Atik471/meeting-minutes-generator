@@ -107,7 +107,7 @@ export const formatTranscript = (deepgramResult) => {
 
 /**
  * Validate audio file
- * @param {Object} file - Multer file object
+ * @param {Object} file - File object from streaming upload
  * @returns {Object} {valid: boolean, error?: string}
  */
 export const validateAudioFile = (file) => {
