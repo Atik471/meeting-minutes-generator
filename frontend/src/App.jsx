@@ -13,9 +13,12 @@ function App() {
     language: 'en',
     temperature: 0.2,
     customPrompt: '',
+    deepgramKey: '',
+    geminiKey: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState(null);
   const [results, setResults] = useState(null);
   const [processingStage, setProcessingStage] = useState(0);
   const [activeTab, setActiveTab] = useState('transcript');
@@ -28,6 +31,7 @@ function App() {
   const handleFileSelect = (selectedFile) => {
     setFile(selectedFile);
     setError('');
+    setErrorDetails(null);
     setResults(null);
   };
 
@@ -43,6 +47,7 @@ function App() {
     try {
       setLoading(true);
       setError('');
+      setErrorDetails(null);
       setProcessingStage(1);
       setResults(null);
       setProcessingTimes({
@@ -57,6 +62,12 @@ function App() {
       formData.append('temperature', config.temperature.toString());
       if (config.customPrompt) {
         formData.append('customPrompt', config.customPrompt);
+      }
+      if (config.deepgramKey) {
+        formData.append('deepgramKey', config.deepgramKey);
+      }
+      if (config.geminiKey) {
+        formData.append('geminiKey', config.geminiKey);
       }
 
       // Use fetch for streaming SSE response, show uploading stage immediately
@@ -91,44 +102,56 @@ function App() {
           const line = lines[i];
 
           if (line.startsWith('data: ')) {
-            try {
-              const eventData = JSON.parse(line.slice(6));
-              console.log('SSE Event:', eventData);
+            let eventData;
 
-              if (eventData.type === 'progress') {
-                // Update stage when transcription completes
-                if (eventData.status === 'complete' && eventData.stage === 2) {
-                  setProcessingStage(3); // Move to MOM generation
-                  setProcessingTimes(prev => ({
-                    ...prev,
-                    transcription: eventData.processingTime,
-                  }));
-                }
-              } else if (eventData.type === 'complete') {
-                // Final result received
-                setResults({
-                  transcript: eventData.transcript,
-                  mom: eventData.mom,
-                  metadata: eventData.metadata,
-                });
-                setProcessingTimes(eventData.metadata?.processingTime);
-                setProcessingStage(4);
-                setActiveTab('mom');
-              } else if (eventData.type === 'error') {
-                throw new Error(eventData.message);
-              }
+            try {
+              eventData = JSON.parse(line.slice(6));
             } catch (e) {
               console.error('Failed to parse SSE event:', e);
+              continue;
+            }
+
+            console.log('SSE Event:', eventData);
+
+            if (eventData.type === 'progress') {
+              // Update stage when transcription completes
+              if (eventData.status === 'complete' && eventData.stage === 2) {
+                setProcessingStage(3); // Move to MOM generation
+                setProcessingTimes(prev => ({
+                  ...prev,
+                  transcription: eventData.processingTime,
+                }));
+              }
+            } else if (eventData.type === 'complete') {
+              // Final result received
+              setResults({
+                transcript: eventData.transcript,
+                mom: eventData.mom,
+                metadata: eventData.metadata,
+              });
+              setProcessingTimes(eventData.metadata?.processingTime);
+              setProcessingStage(4);
+              setActiveTab('mom');
+            } else if (eventData.type === 'error') {
+              const detailedError = new Error(eventData.message || 'Processing failed');
+              detailedError.code = eventData.code;
+              detailedError.source = eventData.source;
+              detailedError.retryable = eventData.retryable;
+              detailedError.details = eventData.details;
+              throw detailedError;
             }
           }
         }
       }
     } catch (err) {
       console.error('Processing error:', err);
-      setError(
-        err.message ||
-        'Failed to process audio file'
-      );
+      setError(err.message || 'Failed to process audio file');
+      setErrorDetails({
+        code: err.code || 'UNKNOWN_ERROR',
+        source: err.source || 'client',
+        retryable: Boolean(err.retryable),
+        details: err.details || '',
+      });
       setProcessingStage(0);
     } finally {
       setLoading(false);
@@ -136,7 +159,10 @@ function App() {
   };
 
   const handleConfigChange = (newConfig) => {
-    setConfig(newConfig);
+    setConfig((prevConfig) => ({
+      ...prevConfig,
+      ...newConfig,
+    }));
   };
 
   const handleRetry = () => {
@@ -208,6 +234,14 @@ function App() {
                 <div className="glass rounded-xl p-4 bg-red-900/20 border border-red-700/50">
                   <p className="text-red-400 text-sm font-medium mb-3">Error</p>
                   <p className="text-red-200 text-sm mb-4">{error}</p>
+                  {errorDetails && (
+                    <div className="mb-4 rounded-lg border border-red-700/40 bg-slate-950/40 p-3 text-xs text-slate-300 space-y-1">
+                      <p><span className="text-slate-400">Source:</span> {errorDetails.source}</p>
+                      <p><span className="text-slate-400">Code:</span> {errorDetails.code}</p>
+                      <p><span className="text-slate-400">Retryable:</span> {errorDetails.retryable ? 'Yes' : 'No'}</p>
+                      {errorDetails.details && <p className="text-slate-400 break-words">{errorDetails.details}</p>}
+                    </div>
+                  )}
                   <button
                     onClick={handleRetry}
                     className="w-full px-3 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-lg text-sm font-medium transition-all"

@@ -8,6 +8,8 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
   const [temperature, setTemperature] = useState(0.2);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [deepgramKey, setDeepgramKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
   const [defaultPrompt, setDefaultPrompt] = useState('');
   const [loadingPrompt, setLoadingPrompt] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -33,27 +35,37 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
 
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
-    onConfigChange({ language: lang, temperature, customPrompt });
+    onConfigChange({ language: lang, temperature, customPrompt, deepgramKey, geminiKey });
   };
 
   const handleTemperatureChange = (temp) => {
     setTemperature(temp);
-    onConfigChange({ language, temperature: temp, customPrompt });
+    onConfigChange({ language, temperature: temp, customPrompt, deepgramKey, geminiKey });
   };
 
   const handlePromptChange = (prompt) => {
     setCustomPrompt(prompt);
-    onConfigChange({ language, temperature, customPrompt: prompt });
+    onConfigChange({ language, temperature, customPrompt: prompt, deepgramKey, geminiKey });
   };
 
   const handleResetPrompt = () => {
     setCustomPrompt('');
-    onConfigChange({ language, temperature, customPrompt: '' });
+    onConfigChange({ language, temperature, customPrompt: '', deepgramKey, geminiKey });
   };
 
   const handleUseDefault = () => {
     setCustomPrompt(defaultPrompt);
-    onConfigChange({ language, temperature, customPrompt: defaultPrompt });
+    onConfigChange({ language, temperature, customPrompt: defaultPrompt, deepgramKey, geminiKey });
+  };
+
+  const handleDeepgramKeyChange = (value) => {
+    setDeepgramKey(value);
+    onConfigChange({ language, temperature, customPrompt, deepgramKey: value, geminiKey });
+  };
+
+  const handleGeminiKeyChange = (value) => {
+    setGeminiKey(value);
+    onConfigChange({ language, temperature, customPrompt, deepgramKey, geminiKey: value });
   };
 
   const handleCopyDefault = async () => {
@@ -131,6 +143,44 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
       {/* Custom Prompt */}
       {showAdvanced && (
         <div className="glass rounded-xl p-4 space-y-3 fade-in">
+          <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Deepgram API Key
+              </label>
+              <input
+                type="password"
+                value={deepgramKey}
+                onChange={(e) => handleDeepgramKeyChange(e.target.value)}
+                disabled={isLoading}
+                placeholder="dg_..."
+                autoComplete="off"
+                spellCheck="false"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Gemini API Key
+              </label>
+              <input
+                type="password"
+                value={geminiKey}
+                onChange={(e) => handleGeminiKeyChange(e.target.value)}
+                disabled={isLoading}
+                placeholder="AIza..."
+                autoComplete="off"
+                spellCheck="false"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-mono"
+              />
+            </div>
+
+            <p className="text-xs text-amber-300/90 leading-relaxed">
+              Keys stay in this browser session only. They are sent to your backend for this request and are not stored in localStorage or a database by this app.
+            </p>
+          </div>
+
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium text-slate-300">
               System Prompt

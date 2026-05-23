@@ -54,7 +54,7 @@ const handleStreamingUpload = (req, res, next) => {
   });
 
   bb.on('field', (fieldname, val) => {
-    console.log(`📋 Field received: ${fieldname} = ${val}`);
+    console.log(`📋 Field received: ${fieldname}`);
     req.body = req.body || {};
     req.body[fieldname] = val;
   });
@@ -96,31 +96,40 @@ let deepgramInstance = null;
 let geminiInstance = null;
 
 /**
- * Lazy-loads and caches API connection clients 
+ * Builds Deepgram and Gemini clients from either request keys or env keys.
+ * Env-based clients are cached; request-supplied keys are created per request.
  */
-export const initializeClients = () => {
-  const deepgramKey = process.env.DEEPGRAM_API_KEY?.trim();
-  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+const createKeyedClients = ({ deepgramKey, geminiKey } = {}) => {
+  const resolvedDeepgramKey = deepgramKey?.trim() || process.env.DEEPGRAM_API_KEY?.trim();
+  const resolvedGeminiKey = geminiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
 
-  if (!deepgramKey || !geminiKey) {
-    throw new Error("Missing required environment API keys inside your .env configuration storage.");
+  if (!resolvedDeepgramKey || !resolvedGeminiKey) {
+    throw new Error('Missing required Deepgram or Gemini API key.');
   }
 
-  if (!deepgramInstance) {
-    console.log("Lazy Loading: Initializing Deepgram Client Instance...");
-    console.log(`  Deepgram Key: ${deepgramKey.substring(0, 10)}...${deepgramKey.substring(deepgramKey.length - 5)}`);
-    deepgramInstance = createClient(deepgramKey);
+  const useSharedCache = !deepgramKey?.trim() && !geminiKey?.trim();
+
+  if (useSharedCache) {
+    if (!deepgramInstance) {
+      console.log('Lazy Loading: Initializing Deepgram Client Instance...');
+      deepgramInstance = createClient(resolvedDeepgramKey);
+    }
+
+    if (!geminiInstance) {
+      console.log('Lazy Loading: Initializing Modern Google Gemini Client Instance...');
+      geminiInstance = new GoogleGenerativeAI(resolvedGeminiKey);
+    }
+
+    return {
+      deepgram: deepgramInstance,
+      gemini: geminiInstance,
+    };
   }
 
-  if (!geminiInstance) {
-    console.log("Lazy Loading: Initializing Modern Google Gemini Client Instance...");
-    console.log(`  Gemini Key: ${geminiKey.substring(0, 10)}...${geminiKey.substring(geminiKey.length - 5)}`);
-    geminiInstance = new GoogleGenerativeAI(geminiKey);
-  }
-
-  return { 
-    deepgram: deepgramInstance, 
-    gemini: geminiInstance 
+  console.log('Initializing per-request API clients from user-provided keys...');
+  return {
+    deepgram: createClient(resolvedDeepgramKey),
+    gemini: new GoogleGenerativeAI(resolvedGeminiKey),
   };
 };
 
@@ -129,6 +138,86 @@ export const initializeClients = () => {
  */
 const sendSSEEvent = (res, eventType, data) => {
   res.write(`data: ${JSON.stringify({ type: eventType, ...data })}\n\n`);
+};
+
+const createFriendlyApiError = (error, source = 'server') => {
+  const message = error?.message || String(error || 'Unknown error');
+  const status = error?.status || error?.response?.status || error?.code || '';
+  const lowered = message.toLowerCase();
+
+  const isAuthError =
+    status === 401 ||
+    status === 403 ||
+    lowered.includes('unauthorized') ||
+    lowered.includes('invalid api key') ||
+    lowered.includes('invalid_api_key') ||
+    lowered.includes('api key') && lowered.includes('invalid');
+
+  const isQuotaError =
+    status === 429 ||
+    lowered.includes('quota') ||
+    lowered.includes('rate limit') ||
+    lowered.includes('too many requests') ||
+    lowered.includes('limit exceeded') ||
+    lowered.includes('resource exhausted');
+
+  const isServerError =
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    lowered.includes('internal server error') ||
+    lowered.includes('service unavailable');
+
+  if (isAuthError) {
+    return {
+      code: 'AUTH_INVALID_KEY',
+      source,
+      retryable: false,
+      message: source === 'deepgram'
+        ? 'Deepgram API key is invalid, revoked, or unauthorized.'
+        : source === 'gemini'
+          ? 'Gemini API key is invalid, revoked, or unauthorized.'
+          : 'API key is invalid, revoked, or unauthorized.',
+      details: message,
+    };
+  }
+
+  if (isQuotaError) {
+    return {
+      code: 'QUOTA_OR_RATE_LIMIT',
+      source,
+      retryable: true,
+      message: source === 'deepgram'
+        ? 'Deepgram quota or rate limit was reached. Try again later or check your plan.'
+        : source === 'gemini'
+          ? 'Gemini quota or rate limit was reached. Try again later or check your plan.'
+          : 'Quota or rate limit was reached. Try again later.',
+      details: message,
+    };
+  }
+
+  if (isServerError) {
+    return {
+      code: 'PROVIDER_SERVER_ERROR',
+      source,
+      retryable: true,
+      message: source === 'deepgram'
+        ? 'Deepgram service returned an error. Please try again.'
+        : source === 'gemini'
+          ? 'Gemini service returned an error. Please try again.'
+          : 'Provider service returned an error. Please try again.',
+      details: message,
+    };
+  }
+
+  return {
+    code: 'UNKNOWN_PROVIDER_ERROR',
+    source,
+    retryable: true,
+    message,
+    details: message,
+  };
 };
 
 /**
@@ -160,8 +249,11 @@ router.post("/", handleStreamingUpload, async (req, res) => {
 
     console.log('✓ SSE headers set');
 
-    // Initialize clients on first request and capture them
-    const { deepgram, gemini } = initializeClients();
+    // Initialize clients from request-supplied keys or env defaults
+    const { deepgram, gemini } = createKeyedClients({
+      deepgramKey: req.body.deepgramKey,
+      geminiKey: req.body.geminiKey,
+    });
     console.log('✓ API clients initialized');
 
     // Extract parameters from request
@@ -171,7 +263,13 @@ router.post("/", handleStreamingUpload, async (req, res) => {
       customPrompt = null,
     } = req.body;
 
-    console.log('📋 Request params:', { language, temperature, customPrompt: !!customPrompt });
+    console.log('📋 Request params:', {
+      language,
+      temperature,
+      customPrompt: !!customPrompt,
+      deepgramKey: !!req.body.deepgramKey,
+      geminiKey: !!req.body.geminiKey,
+    });
 
     // Send immediate progress event to confirm upload received
     sendSSEEvent(res, 'progress', {
@@ -190,23 +288,25 @@ router.post("/", handleStreamingUpload, async (req, res) => {
 
     // Transcribe audio directly via stream (zero buffering!)
     console.log('📡 Calling deepgram.listen.prerecorded.transcribeFile...');
-    const { result, error: deepgramError } =
-      await deepgram.listen.prerecorded.transcribeFile(req.file.stream, {
+    let result;
+    try {
+      const transcriptionResponse = await deepgram.listen.prerecorded.transcribeFile(req.file.stream, {
         model: "nova-3",
         language: language,
         diarize: true,
         smart_format: true,
         filler_words: false,
       });
+      result = transcriptionResponse.result;
+    } catch (error) {
+      const friendlyError = createFriendlyApiError(error, 'deepgram');
+      console.error('❌ Deepgram Error:', error);
+      sendSSEEvent(res, 'error', friendlyError);
+      return res.end();
+    }
 
     const transcriptionTime = Date.now() - transcriptionStartTime;
     console.log(`✓ Deepgram response received in ${transcriptionTime}ms`);
-
-    if (deepgramError) {
-      console.error("❌ Deepgram Error:", deepgramError);
-      sendSSEEvent(res, 'error', { message: `Deepgram transcription failed: ${deepgramError.message}` });
-      return res.end();
-    }
 
     // Format transcript with speaker labels
     const formattedTranscript = formatTranscript(result);
@@ -240,16 +340,30 @@ router.post("/", handleStreamingUpload, async (req, res) => {
     });
 
     console.log('📡 Calling gemini.generateContent...');
-    const response = await model.generateContent(
-      `Here is the multi-speaker meeting transcript to summarize:\n\n${formattedTranscript}`
-    );
+    let momText;
+    try {
+      const response = await model.generateContent(
+        `Here is the multi-speaker meeting transcript to summarize:\n\n${formattedTranscript}`
+      );
+      momText = response.response.text();
+    } catch (error) {
+      const friendlyError = createFriendlyApiError(error, 'gemini');
+      console.error('❌ Gemini Error:', error);
+      sendSSEEvent(res, 'error', friendlyError);
+      return res.end();
+    }
 
     const momTime = Date.now() - momStartTime;
-    const momText = response.response.text();
     console.log(`✓ Gemini response received in ${momTime}ms`);
 
     if (!momText) {
-      sendSSEEvent(res, 'error', { message: 'Failed to generate MOM. Please try again.' });
+      sendSSEEvent(res, 'error', {
+        code: 'EMPTY_MODEL_RESPONSE',
+        source: 'gemini',
+        retryable: true,
+        message: 'Failed to generate MOM. Please try again.',
+        details: 'The Gemini model returned an empty response.',
+      });
       return res.end();
     }
 
