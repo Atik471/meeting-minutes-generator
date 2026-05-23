@@ -319,8 +319,8 @@ function App() {
           <div className="max-w-6xl mx-auto px-6 py-6 text-center text-slate-400 text-sm">
             <p>
               Powered by{' '}
-              <span className="gradient-text font-semibold">Deepgram Nova-3</span> &
-              <span className="gradient-text font-semibold"> Gemini 2.5 Flash</span>
+              <span className="bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent font-semibold">Deepgram Nova-3</span> &
+              <span className="bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent font-semibold"> Gemini 2.5 Flash</span>
             </p>
           </div>
         </footer>
