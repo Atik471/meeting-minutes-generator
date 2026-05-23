@@ -1,98 +1,172 @@
-# Meeting Minutes Generator - Audio to MOM Platform
+# Meeting Minutes Generator
 
-End-to-end automation platform for converting meeting audio recordings into professional Minutes of Meeting documents using Deepgram Nova-3 for transcription and Gemini 2.5 Flash for summarization.
+Meeting Minutes Generator is a web app that turns an uploaded meeting recording into a transcript and a polished Minutes of Meeting document.
+
+The app uses:
+- Deepgram for speech-to-text transcription
+- Gemini for summarizing the transcript into meeting minutes
+- A React + Vite frontend for upload, configuration, and results
+- An Express backend that streams audio directly to Deepgram
+
+## Features
+
+- Upload an audio file and process it in the browser
+- Stream audio through the server without writing the file to disk
+- Generate a transcript with speaker labels
+- Generate structured meeting minutes from the transcript
+- Export the output as Markdown or plain text
+- Let users supply their own Deepgram and Gemini API keys per request
+- Show structured API/provider errors in the UI
+
+## How It Works
+
+1. The frontend sends the uploaded audio and configuration to the backend.
+2. The backend parses the multipart request with `busboy`.
+3. The audio stream is piped through a `PassThrough` stream directly into Deepgram.
+4. The transcript is formatted.
+5. Gemini generates the meeting minutes from that transcript.
+6. The backend returns progress updates and the final result over SSE.
+
+Important: the current backend is an Express server. It is not yet deployed as a Vercel Serverless Function, so a full Vercel deployment requires adapting the backend or hosting it separately.
 
 ## Project Structure
 
-```
+```text
 meeting-minutes-generator/
-├── backend/              # Express.js API server
+├── backend/
 │   ├── src/
-│   │   ├── index.js      # Server entry point
-│   │   ├── routes/       # API routes
-│   │   └── utils/        # Helper functions
+│   │   ├── index.js
+│   │   ├── transcribeRoute.js
+│   │   └── utils.js
 │   └── package.json
-├── frontend/             # React dashboard
+├── frontend/
 │   ├── src/
-│   ├── public/
+│   │   ├── App.jsx
+│   │   └── components/
+│   ├── vite.config.js
 │   └── package.json
-├── prompt.txt            # System prompt for MOM generation
-├── .env                  # Environment variables (API keys)
 └── README.md
 ```
 
-## Phase 1: Environment Setup & Infrastructure ✅
+## Requirements
 
-### Setup Instructions
+- Node.js 18 or newer
+- A Deepgram API key
+- A Gemini API key
 
-1. **Install Backend Dependencies**
-   ```bash
-   cd backend
-   npm install
-   cd ..
-   ```
+## Setup
 
-2. **Install Frontend Dependencies**
-   ```bash
-   cd frontend
-   npm install
-   cd ..
-   ```
+### 1. Install dependencies
 
-3. **Configure Environment Variables**
-   - Copy `.env.example` to `.env` (already done)
-   - Add your API keys:
-     - `DEEPGRAM_API_KEY`: Get from https://console.deepgram.com
-     - `GEMINI_API_KEY`: Get from https://aistudio.google.com
+```bash
+cd backend
+npm install
 
-4. **Verify Installation**
-   ```bash
-   # Backend
-   cd backend && npm list | grep -E "@deepgram|@google|multer"
-   
-   # Frontend
-   cd frontend && npm list | grep -E "react-markdown|lucide-react"
-   ```
+cd ../frontend
+npm install
+```
 
-## Key Dependencies
+### 2. Configure environment variables
+
+Create a `.env` file in `backend/` with:
+
+```env
+PORT=5000
+DEEPGRAM_API_KEY=your_deepgram_key
+GEMINI_API_KEY=your_gemini_key
+```
+
+The frontend can also accept keys per request through the UI.
+
+### 3. Configure the frontend API URL
+
+By default, the frontend uses `http://localhost:5000`.
+
+If your backend is hosted elsewhere, set:
+
+```env
+VITE_API_BASE_URL=https://your-backend-domain.com
+```
+
+## Run Locally
 
 ### Backend
-- **@deepgram/sdk**: Speech-to-text transcription
-- **@google/generative-ai**: Gemini API for MOM generation
-- **express**: HTTP server framework
-- **multer**: File upload handling (supports up to 100MB audio)
-- **dotenv**: Environment variable management
-- **cors**: Cross-origin resource sharing
+
+```bash
+cd backend
+npm run dev
+```
 
 ### Frontend
-- **react**: UI framework
-- **react-markdown**: Markdown rendering for MOM output
-- **lucide-react**: Icon components
-- **canvas-confetti**: Success state animations
-- **axios**: HTTP client for API calls
 
-## Next Steps
-
-- **Phase 2**: Implement backend API route `POST /api/transcribe`
-- **Phase 3**: Build React dashboard with drag-and-drop, configuration panel, and dual-panel output
-
-## API Architecture
-
-```
-Audio File Upload (Frontend)
-         ↓
-  POST /api/transcribe
-         ↓
-  Deepgram Nova-3 (Transcription with speaker diarization)
-         ↓
-  Text Processing & Formatting
-         ↓
-  Gemini 2.5 Flash (MOM Generation)
-         ↓
-  Return: { transcript, mom }
-         ↓
-  Display in Dashboard + Export Options
+```bash
+cd frontend
+npm run dev
 ```
 
----
-Last updated: 2026-05-20
+Open the frontend URL shown by Vite in your browser.
+
+## API Overview
+
+### `GET /health`
+
+Returns a basic health check.
+
+### `GET /api/default-prompt`
+
+Returns the default Gemini system prompt.
+
+### `POST /api/transcribe`
+
+Accepts:
+- `audio` file upload
+- `language`
+- `temperature`
+- optional `customPrompt`
+- optional `deepgramKey`
+- optional `geminiKey`
+
+Returns SSE events for:
+- upload received
+- transcription progress
+- completion
+- errors
+
+## Notes on API Keys
+
+- If the user enters keys in the UI, those keys are sent only with that request.
+- Keys are not stored in browser persistent storage.
+- The backend prefers request-scoped keys when provided and falls back to `.env` keys otherwise.
+
+## Deployment Notes
+
+### Frontend on Vercel
+
+The frontend is Vite-based and can be deployed to Vercel as a static site.
+
+### Backend hosting
+
+The backend currently runs as a normal Express server. For Vercel, you will need one of these approaches:
+- convert the backend to Vercel Serverless Functions
+- or host the backend on another platform such as Render, Railway, Fly.io, or a VM
+
+If the backend is hosted separately, set `VITE_API_BASE_URL` in the frontend deployment environment.
+
+## Tech Stack
+
+- React 18
+- Vite
+- Express
+- busboy
+- Deepgram SDK
+- Google Generative AI SDK
+
+## Troubleshooting
+
+- If uploads fail immediately, check that the backend is running and reachable from the frontend.
+- If the UI shows an auth error, verify the Deepgram and Gemini keys.
+- If the UI shows a quota or rate-limit error, the provider likely rejected the request due to usage limits.
+
+## License
+
+MIT
