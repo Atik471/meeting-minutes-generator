@@ -5,7 +5,7 @@ import ConfigPanel from './components/ConfigPanel';
 import OutputPanel from './components/OutputPanel';
 import ProcessingStatus from './components/ProcessingStatus';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 function App() {
   const [file, setFile] = useState(null);

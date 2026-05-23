@@ -1,5 +1,5 @@
 import { createClient } from "@deepgram/sdk";
-import { GoogleGenAI } from "@google/genai"; 
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import express from "express";
 import multer from "multer";
 import {
@@ -24,20 +24,23 @@ let geminiInstance = null;
  * Lazy-loads and caches API connection clients 
  */
 export const initializeClients = () => {
-  if (!process.env.DEEPGRAM_API_KEY || !process.env.GEMINI_API_KEY) {
+  const deepgramKey = process.env.DEEPGRAM_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (!deepgramKey || !geminiKey) {
     throw new Error("Missing required environment API keys inside your .env configuration storage.");
   }
 
   if (!deepgramInstance) {
     console.log("Lazy Loading: Initializing Deepgram Client Instance...");
-    deepgramInstance = createClient(process.env.DEEPGRAM_API_KEY);
+    console.log(`  Deepgram Key: ${deepgramKey.substring(0, 10)}...${deepgramKey.substring(deepgramKey.length - 5)}`);
+    deepgramInstance = createClient(deepgramKey);
   }
 
   if (!geminiInstance) {
     console.log("Lazy Loading: Initializing Modern Google Gemini Client Instance...");
-    geminiInstance = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY
-    });
+    console.log(`  Gemini Key: ${geminiKey.substring(0, 10)}...${geminiKey.substring(geminiKey.length - 5)}`);
+    geminiInstance = new GoogleGenerativeAI(geminiKey);
   }
 
   return { 
@@ -52,8 +55,8 @@ export const initializeClients = () => {
  */
 router.post("/", upload.single("audio"), async (req, res) => {
   try {
-    // Initialize clients on first request
-    initializeClients();
+    // Initialize clients on first request and capture them
+    const { deepgram, gemini } = initializeClients();
 
     // Validate audio file
     const fileValidation = validateAudioFile(req.file);
@@ -101,7 +104,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
     const systemPrompt = customPrompt || SYSTEM_PROMPT;
 
     // Generate MOM with Gemini
-    const model = genAI.getGenerativeModel({
+    const model = gemini.getGenerativeModel({
       model: "gemini-2.5-flash",
       systemInstruction: {
         parts: [{ text: systemPrompt }]
