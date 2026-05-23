@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { Mic } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import ConfigPanel from './components/ConfigPanel';
@@ -20,7 +19,11 @@ function App() {
   const [results, setResults] = useState(null);
   const [processingStage, setProcessingStage] = useState(0);
   const [activeTab, setActiveTab] = useState('transcript');
-  const [processingTimes, setProcessingTimes] = useState(null);
+  const [processingTimes, setProcessingTimes] = useState({
+    transcription: null,
+    momGeneration: null,
+    total: null,
+  });
 
   const handleFileSelect = (selectedFile) => {
     setFile(selectedFile);
@@ -42,7 +45,11 @@ function App() {
       setError('');
       setProcessingStage(1);
       setResults(null);
-      setProcessingTimes(null);
+      setProcessingTimes({
+        transcription: null,
+        momGeneration: null,
+        total: null,
+      });
 
       const formData = new FormData();
       formData.append('audio', audioFile);
@@ -54,31 +61,69 @@ function App() {
 
       setProcessingStage(2);
 
-      const response = await axios.post(`${API_BASE_URL}/api/transcribe`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000, // 5 minutes
+      // Use fetch to get streaming SSE response
+      const response = await fetch(`${API_BASE_URL}/api/transcribe`, {
+        method: 'POST',
+        body: formData,
       });
 
-      // Simulate showing step 3 briefly before completion
-      setProcessingStage(3);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show step 3
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `HTTP ${response.status}`);
+      }
 
-      if (response.data.success) {
-        console.log('Backend response received:', response.data);
-        setResults({
-          transcript: response.data.transcript,
-          mom: response.data.mom,
-          metadata: response.data.metadata,
-        });
-        const timingData = response.data.metadata?.processingTime;
-        console.log('Processing times:', timingData);
-        setProcessingTimes(timingData);
-        setProcessingStage(4);
-        setActiveTab('mom'); // Show MOM by default
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines[lines.length - 1]; // Keep incomplete line in buffer
+
+        for (let i = 0; i < lines.length - 1; i++) {
+          const line = lines[i];
+
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+              console.log('SSE Event:', eventData);
+
+              if (eventData.type === 'progress') {
+                // Update stage when transcription completes
+                if (eventData.status === 'complete' && eventData.stage === 2) {
+                  setProcessingStage(3); // Move to MOM generation
+                  setProcessingTimes(prev => ({
+                    ...prev,
+                    transcription: eventData.processingTime,
+                  }));
+                }
+              } else if (eventData.type === 'complete') {
+                // Final result received
+                setResults({
+                  transcript: eventData.transcript,
+                  mom: eventData.mom,
+                  metadata: eventData.metadata,
+                });
+                setProcessingTimes(eventData.metadata?.processingTime);
+                setProcessingStage(4);
+                setActiveTab('mom');
+              } else if (eventData.type === 'error') {
+                throw new Error(eventData.message);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE event:', e);
+            }
+          }
+        }
       }
     } catch (err) {
+      console.error('Processing error:', err);
       setError(
-        err.response?.data?.error ||
         err.message ||
         'Failed to process audio file'
       );
@@ -171,7 +216,7 @@ function App() {
               )}
 
               {/* Processing Times Summary */}
-              {processingTimes && !loading && (
+              {(processingTimes.transcription || processingTimes.momGeneration || processingTimes.total) && !loading && (
                 <div className="glass rounded-xl p-4 bg-gradient-to-r from-cyan-900/30 to-teal-900/30 border border-cyan-700/50">
                   <p className="text-xs text-cyan-300 uppercase font-semibold mb-3">Processing Times</p>
                   <div className="space-y-2">

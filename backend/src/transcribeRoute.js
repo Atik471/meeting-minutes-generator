@@ -50,18 +50,33 @@ export const initializeClients = () => {
 };
 
 /**
+ * Helper function to send SSE event
+ */
+const sendSSEEvent = (res, eventType, data) => {
+  res.write(`data: ${JSON.stringify({ type: eventType, ...data })}\n\n`);
+};
+
+/**
  * POST /api/transcribe
  * Main endpoint for transcribing audio and generating MOM
+ * Uses Server-Sent Events (SSE) for real-time progress updates
  */
 router.post("/", upload.single("audio"), async (req, res) => {
   try {
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
     // Initialize clients on first request and capture them
     const { deepgram, gemini } = initializeClients();
 
     // Validate audio file
     const fileValidation = validateAudioFile(req.file);
     if (!fileValidation.valid) {
-      return res.status(400).json({ error: fileValidation.error });
+      sendSSEEvent(res, 'error', { message: fileValidation.error });
+      return res.end();
     }
 
     // Extract parameters from request
@@ -88,18 +103,26 @@ router.post("/", upload.single("audio"), async (req, res) => {
 
     if (deepgramError) {
       console.error("Deepgram Error:", deepgramError);
-      throw new Error(`Deepgram transcription failed: ${deepgramError.message}`);
+      sendSSEEvent(res, 'error', { message: `Deepgram transcription failed: ${deepgramError.message}` });
+      return res.end();
     }
 
     // Format transcript with speaker labels
     const formattedTranscript = formatTranscript(result);
 
     if (!formattedTranscript || formattedTranscript.trim().length === 0) {
-      return res.status(422).json({
-        error:
-          "Audio processed but no clear conversational speech was detected.",
-      });
+      sendSSEEvent(res, 'error', { message: 'Audio processed but no clear conversational speech was detected.' });
+      return res.end();
     }
+
+    // Send transcription complete event
+    console.log(`Transcription complete in ${transcriptionTime}ms`);
+    sendSSEEvent(res, 'progress', {
+      stage: 2,
+      label: 'Transcribing',
+      status: 'complete',
+      processingTime: transcriptionTime,
+    });
 
     console.log("Step 2/2: Generating MOM with Gemini 2.5 Flash...");
     const momStartTime = Date.now();
@@ -123,17 +146,18 @@ router.post("/", upload.single("audio"), async (req, res) => {
     const momText = response.response.text();
 
     if (!momText) {
-      return res.status(500).json({
-        error: "Failed to generate MOM. Please try again.",
-      });
+      sendSSEEvent(res, 'error', { message: 'Failed to generate MOM. Please try again.' });
+      return res.end();
     }
 
     console.log("✅ Processing Complete!");
     console.log(`  Transcription: ${transcriptionTime}ms`);
     console.log(`  MOM Generation: ${momTime}ms`);
 
-    // Return results with timing information
-    return res.status(200).json({
+    // Send MOM complete event with all results
+    sendSSEEvent(res, 'complete', {
+      stage: 4,
+      label: 'Complete',
       success: true,
       transcript: formattedTranscript,
       mom: momText,
@@ -149,11 +173,14 @@ router.post("/", upload.single("audio"), async (req, res) => {
         },
       },
     });
+
+    res.end();
   } catch (err) {
     console.error("Pipeline Error:", err);
-    return res.status(500).json({
-      error: err.message || "Internal server error during transcription pipeline",
+    sendSSEEvent(res, 'error', {
+      message: err.message || "Internal server error during transcription pipeline",
     });
+    res.end();
   }
 });
 
