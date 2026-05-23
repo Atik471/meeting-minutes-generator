@@ -5,6 +5,97 @@ import ReactMarkdown from 'react-markdown';
 const OutputPanel = ({ transcript, mom, activeTab, onTabChange }) => {
   const [copyFeedback, setCopyFeedback] = useState('');
 
+  const convertInlineMarkdown = (text) => {
+    if (!text) return '';
+
+    return text
+      .replace(/!\[(.*?)\]\((.*?)\)/g, '$1')
+      .replace(/\[(.*?)\]\((.*?)\)/g, '$1 ($2)')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/__(.*?)__/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/_(.*?)_/g, '$1')
+      .replace(/~~(.*?)~~/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/<[^>]+>/g, '');
+  };
+
+  const stripMarkdown = (markdownText) => {
+    if (!markdownText) return '';
+
+    const lines = markdownText.replace(/\r\n/g, '\n').split('\n');
+    const output = [];
+    let inCodeBlock = false;
+
+    lines.forEach((line) => {
+      const trimmedLine = line.replace(/[ \t]+$/g, '');
+      const trimmedStart = trimmedLine.trimStart();
+
+      if (/^```/.test(trimmedStart)) {
+        inCodeBlock = !inCodeBlock;
+        if (!inCodeBlock) {
+          output.push('');
+        }
+        return;
+      }
+
+      if (inCodeBlock) {
+        output.push(trimmedLine.replace(/^\s{0,3}/, ''));
+        return;
+      }
+
+      if (!trimmedStart) {
+        if (output[output.length - 1] !== '') {
+          output.push('');
+        }
+        return;
+      }
+
+      const headingMatch = trimmedStart.match(/^(#{1,6})\s+(.*)$/);
+      if (headingMatch) {
+        const headingText = convertInlineMarkdown(headingMatch[2]);
+        output.push('');
+        output.push(headingText);
+        output.push('');
+        return;
+      }
+
+      const blockquoteMatch = trimmedStart.match(/^>\s?(.*)$/);
+      if (blockquoteMatch) {
+        output.push(`> ${convertInlineMarkdown(blockquoteMatch[1])}`.trimEnd());
+        return;
+      }
+
+      const unorderedMatch = trimmedStart.match(/^([-*+])\s+(.*)$/);
+      if (unorderedMatch) {
+        output.push(`- ${convertInlineMarkdown(unorderedMatch[2])}`.trimEnd());
+        return;
+      }
+
+      const orderedMatch = trimmedStart.match(/^(\d+)\.\s+(.*)$/);
+      if (orderedMatch) {
+        output.push(`${orderedMatch[1]}. ${convertInlineMarkdown(orderedMatch[2])}`.trimEnd());
+        return;
+      }
+
+      const tableCells = trimmedStart.includes('|')
+        ? trimmedStart.split('|').map((cell) => cell.trim()).filter(Boolean)
+        : null;
+
+      if (tableCells && tableCells.length > 1) {
+        output.push(tableCells.map((cell) => convertInlineMarkdown(cell)).join(' | '));
+        return;
+      }
+
+      output.push(convertInlineMarkdown(trimmedLine));
+    });
+
+    return output
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
   const handleCopy = (text, source) => {
     navigator.clipboard.writeText(text);
     setCopyFeedback(source);
@@ -97,7 +188,7 @@ const OutputPanel = ({ transcript, mom, activeTab, onTabChange }) => {
                 Download MD
               </button>
               <button
-                onClick={() => handleDownload(mom, 'MOM.txt', 'text/plain')}
+                onClick={() => handleDownload(stripMarkdown(mom), 'MOM.txt', 'text/plain')}
                 className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-all"
               >
                 <Download className="w-4 h-4" />
