@@ -6,6 +6,7 @@ import OutputPanel from './components/OutputPanel';
 import ProcessingStatus from './components/ProcessingStatus';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const VERCEL_FUNCTION_BODY_LIMIT_BYTES = 4.5 * 1024 * 1024;
 
 function App() {
   const [file, setFile] = useState(null);
@@ -45,6 +46,20 @@ function App() {
 
   const processFile = async (audioFile) => {
     try {
+      const isVercelBackend = API_BASE_URL.includes('vercel.app');
+
+      if (isVercelBackend && audioFile.size > VERCEL_FUNCTION_BODY_LIMIT_BYTES) {
+        throw Object.assign(
+          new Error('This file is larger than Vercel Function request limits. Use a smaller audio file or host the backend outside Vercel for large uploads.'),
+          {
+            code: 'FILE_TOO_LARGE_FOR_VERCEL',
+            source: 'client',
+            retryable: false,
+            details: 'Vercel Functions accept a maximum request body size of 4.5 MB. A larger upload will be rejected before it reaches your backend code.',
+          }
+        );
+      }
+
       setLoading(true);
       setError('');
       setErrorDetails(null);
@@ -208,6 +223,10 @@ function App() {
             <div className="lg:col-span-1 space-y-6">
               {/* File Upload */}
               <FileUpload onFileSelect={handleFileSelect} isLoading={loading} />
+
+              <div className="rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-3 text-xs text-cyan-200">
+                Free hosted backend: request body size must be 4.5 MB or less. Larger audio files need a self-hosted backend.
+              </div>
 
               {/* Config Panel */}
               {!results && (

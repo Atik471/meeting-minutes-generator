@@ -169,6 +169,8 @@ The local backend still runs as a normal Express server, but the Vercel deployme
 
 If the backend is hosted separately, set `VITE_API_BASE_URL` in the frontend deployment environment to the backend Vercel URL.
 
+Free hosted note: if you keep the backend on a free serverless platform, the request body size must be 4.5 MB or less. Larger audio files require a self-hosted backend or a platform with a higher upload limit.
+
 ## Tech Stack
 
 - React 18
