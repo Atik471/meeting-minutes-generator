@@ -72,6 +72,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
     } = req.body;
 
     console.log("Step 1/2: Transcribing audio with Deepgram Nova-3...");
+    const transcriptionStartTime = Date.now();
 
     // Transcribe audio with Deepgram
     const { result, error: deepgramError } =
@@ -82,6 +83,8 @@ router.post("/", upload.single("audio"), async (req, res) => {
         smart_format: true,
         filler_words: false,
       });
+
+    const transcriptionTime = Date.now() - transcriptionStartTime;
 
     if (deepgramError) {
       console.error("Deepgram Error:", deepgramError);
@@ -99,6 +102,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
     }
 
     console.log("Step 2/2: Generating MOM with Gemini 2.5 Flash...");
+    const momStartTime = Date.now();
 
     // Use hardcoded system prompt or custom prompt
     const systemPrompt = customPrompt || SYSTEM_PROMPT;
@@ -115,6 +119,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
       `Here is the multi-speaker meeting transcript to summarize:\n\n${formattedTranscript}`
     );
 
+    const momTime = Date.now() - momStartTime;
     const momText = response.response.text();
 
     if (!momText) {
@@ -124,8 +129,10 @@ router.post("/", upload.single("audio"), async (req, res) => {
     }
 
     console.log("✅ Processing Complete!");
+    console.log(`  Transcription: ${transcriptionTime}ms`);
+    console.log(`  MOM Generation: ${momTime}ms`);
 
-    // Return results
+    // Return results with timing information
     return res.status(200).json({
       success: true,
       transcript: formattedTranscript,
@@ -135,6 +142,11 @@ router.post("/", upload.single("audio"), async (req, res) => {
         temperature: parseFloat(temperature),
         audioSize: req.file.size,
         timestamp: new Date().toISOString(),
+        processingTime: {
+          transcription: transcriptionTime,
+          momGeneration: momTime,
+          total: transcriptionTime + momTime,
+        },
       },
     });
   } catch (err) {

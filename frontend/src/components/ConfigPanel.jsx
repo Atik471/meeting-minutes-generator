@@ -100,7 +100,7 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
             className="w-full h-32 bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm placeholder-slate-500 resize-none focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <p className="text-xs text-slate-500">
-            Leave empty to use your default prompt.txt file
+            Leave empty to use your default prompt
           </p>
         </div>
       )}

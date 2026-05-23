@@ -20,6 +20,7 @@ function App() {
   const [results, setResults] = useState(null);
   const [processingStage, setProcessingStage] = useState(0);
   const [activeTab, setActiveTab] = useState('transcript');
+  const [processingTimes, setProcessingTimes] = useState(null);
 
   const handleFileSelect = (selectedFile) => {
     setFile(selectedFile);
@@ -41,6 +42,7 @@ function App() {
       setError('');
       setProcessingStage(1);
       setResults(null);
+      setProcessingTimes(null);
 
       const formData = new FormData();
       formData.append('audio', audioFile);
@@ -57,14 +59,20 @@ function App() {
         timeout: 300000, // 5 minutes
       });
 
+      // Simulate showing step 3 briefly before completion
       setProcessingStage(3);
+      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show step 3
 
       if (response.data.success) {
+        console.log('Backend response received:', response.data);
         setResults({
           transcript: response.data.transcript,
           mom: response.data.mom,
           metadata: response.data.metadata,
         });
+        const timingData = response.data.metadata?.processingTime;
+        console.log('Processing times:', timingData);
+        setProcessingTimes(timingData);
         setProcessingStage(4);
         setActiveTab('mom'); // Show MOM by default
       }
@@ -145,7 +153,7 @@ function App() {
 
               {/* Processing Status */}
               {loading && (
-                <ProcessingStatus stage={processingStage} isComplete={processingStage === 4} />
+                <ProcessingStatus stage={processingStage} isComplete={processingStage === 4} processingTimes={processingTimes} />
               )}
 
               {/* Error Message */}
@@ -159,6 +167,33 @@ function App() {
                   >
                     Retry
                   </button>
+                </div>
+              )}
+
+              {/* Processing Times Summary */}
+              {processingTimes && !loading && (
+                <div className="glass rounded-xl p-4 bg-gradient-to-r from-cyan-900/30 to-teal-900/30 border border-cyan-700/50">
+                  <p className="text-xs text-cyan-300 uppercase font-semibold mb-3">Processing Times</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-300">Transcription:</span>
+                      <span className="text-sm font-mono text-cyan-400">
+                        {processingTimes.transcription ? `${(processingTimes.transcription / 1000).toFixed(2)}s` : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-300">MOM Generation:</span>
+                      <span className="text-sm font-mono text-cyan-400">
+                        {processingTimes.momGeneration ? `${(processingTimes.momGeneration / 1000).toFixed(2)}s` : '-'}
+                      </span>
+                    </div>
+                    <div className="border-t border-cyan-700/30 pt-2 mt-2 flex justify-between items-center">
+                      <span className="text-sm font-semibold text-slate-200">Total:</span>
+                      <span className="text-sm font-mono font-semibold text-cyan-300">
+                        {processingTimes.total ? `${(processingTimes.total / 1000).toFixed(2)}s` : '-'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
 
