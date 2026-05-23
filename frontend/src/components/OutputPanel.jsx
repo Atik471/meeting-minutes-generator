@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Download, FileText } from 'lucide-react';
+import { Copy, Download, FileText, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 const OutputPanel = ({ transcript, mom, activeTab, onTabChange }) => {
@@ -29,23 +29,23 @@ const OutputPanel = ({ transcript, mom, activeTab, onTabChange }) => {
       <div className="flex gap-2 border-b border-slate-700">
         <button
           onClick={() => onTabChange('transcript')}
-          className={`px-4 py-3 font-medium text-sm transition-all border-b-2 ${
+          className={`px-4 py-3 font-medium text-sm transition-all border-b-2 flex items-center gap-2 ${
             activeTab === 'transcript'
-              ? 'border-purple-500 text-purple-400'
+              ? 'border-cyan-500 text-cyan-400'
               : 'border-transparent text-slate-400 hover:text-slate-300'
           }`}
         >
-          📄 Transcript
+          <FileText className="w-4 h-4" /> Transcript
         </button>
         <button
           onClick={() => onTabChange('mom')}
-          className={`px-4 py-3 font-medium text-sm transition-all border-b-2 ${
+          className={`px-4 py-3 font-medium text-sm transition-all border-b-2 flex items-center gap-2 ${
             activeTab === 'mom'
-              ? 'border-purple-500 text-purple-400'
+              ? 'border-cyan-500 text-cyan-400'
               : 'border-transparent text-slate-400 hover:text-slate-300'
           }`}
         >
-          ✨ Minutes of Meeting
+          <CheckCircle className="w-4 h-4" /> Minutes of Meeting
         </button>
       </div>
 
@@ -57,14 +57,14 @@ const OutputPanel = ({ transcript, mom, activeTab, onTabChange }) => {
             <div className="flex gap-2 p-4 border-b border-slate-700">
               <button
                 onClick={() => handleCopy(transcript, 'transcript')}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-all"
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-lg text-sm transition-all"
               >
                 <Copy className="w-4 h-4" />
                 {copyFeedback === 'transcript' ? 'Copied!' : 'Copy'}
               </button>
               <button
                 onClick={() => handleDownload(transcript, 'transcript.txt', 'text/plain')}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-all"
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-lg text-sm transition-all"
               >
                 <Download className="w-4 h-4" />
                 Download
@@ -84,14 +84,14 @@ const OutputPanel = ({ transcript, mom, activeTab, onTabChange }) => {
             <div className="flex gap-2 p-4 border-b border-slate-700 flex-wrap">
               <button
                 onClick={() => handleCopy(mom, 'mom')}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-all"
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-lg text-sm transition-all"
               >
                 <Copy className="w-4 h-4" />
                 {copyFeedback === 'mom' ? 'Copied!' : 'Copy'}
               </button>
               <button
                 onClick={() => handleDownload(mom, 'MOM.md', 'text/markdown')}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-all"
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-lg text-sm transition-all"
               >
                 <FileText className="w-4 h-4" />
                 Download MD

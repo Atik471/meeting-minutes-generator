@@ -29,11 +29,10 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
         <label className="block text-sm font-medium text-slate-300 mb-3">
           Language
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {[
             { code: 'en', label: 'English' },
             { code: 'bn', label: 'Bengali' },
-            { code: 'es', label: 'Spanish' },
           ].map((lang) => (
             <button
               key={lang.code}
@@ -41,7 +40,7 @@ const ConfigPanel = ({ onConfigChange, isLoading }) => {
               disabled={isLoading}
               className={`py-2 px-3 rounded-lg transition-all font-medium text-sm ${
                 language === lang.code
-                  ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white'
+                  ? 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
