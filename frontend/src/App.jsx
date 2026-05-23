@@ -190,10 +190,10 @@ function App() {
           <div className="max-w-6xl mx-auto px-6 py-8">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
-                  <Mic className="w-8 h-8" /> Meeting Minutes Generator
+                <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-white mb-2 flex items-center gap-2 whitespace-nowrap">
+                  <Mic className="w-5 h-5 sm:w-7 sm:h-7 lg:w-8 lg:h-8 shrink-0" /> Meeting Minutes Generator
                 </h1>
-                <p className="text-slate-400">
+                <p className="text-xs sm:text-sm text-slate-400">
                   Transform your audio meetings into professional minutes instantly
                 </p>
               </div>
