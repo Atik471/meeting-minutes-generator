@@ -1,9 +1,15 @@
-const allowedOrigins = new Set([
+const defaultOrigins = [
   "http://localhost:3000",
   "http://localhost:4173",
   "http://localhost:5000",
-  "https://meeting-minutes-generator-qrzk.vercel.app",
-]);
+];
+
+const envOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = new Set([...defaultOrigins, ...envOrigins]);
 
 export const corsOptions = {
   origin(origin, callback) {
